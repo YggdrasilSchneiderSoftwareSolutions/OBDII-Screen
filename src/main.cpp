@@ -112,7 +112,8 @@ enum class OBD_PID_State { DREHZAHL, KMH, OEL_TEMP, LAUFZEIT, TANK_FUELLSTAND, V
 OBD_PID_State aktuellePID = OBD_PID_State::DREHZAHL;
 
 // Klassendefinitionen für verschiedene Screens auf dem SSD1306
-class OBDDataScreen {
+class OBDDataScreen
+{
   protected:
     Adafruit_SSD1306 &ssd1306;
     // virtual method to override
@@ -127,7 +128,8 @@ class OBDDataScreen {
     }
 };
 
-class FuelConsumptionScreen : public OBDDataScreen {
+class FuelConsumptionScreen : public OBDDataScreen
+{
   protected:
     void getDisplayText() {
       ssd1306.setTextSize(1);
@@ -145,9 +147,11 @@ class FuelConsumptionScreen : public OBDDataScreen {
     FuelConsumptionScreen(Adafruit_SSD1306 &ssd1306) : OBDDataScreen(ssd1306){}
 };
 
-class OilTemperatureScreen : public OBDDataScreen {
+class OilTemperatureScreen : public OBDDataScreen
+{
   protected:
-    void getDisplayText() {
+    void getDisplayText()
+    {
       ssd1306.setTextSize(1);
       ssd1306.cp437(true); // Use full 256 char 'Code Page 437' font
       ssd1306.setTextColor(SSD1306_WHITE);
@@ -163,7 +167,8 @@ class OilTemperatureScreen : public OBDDataScreen {
     OilTemperatureScreen(Adafruit_SSD1306 &ssd1306) : OBDDataScreen(ssd1306){}
 };
 
-class RunTimeScreen : public OBDDataScreen {
+class RunTimeScreen : public OBDDataScreen
+{
   private:
     String getLaufzeitFormatiert()
     {
@@ -189,7 +194,8 @@ class RunTimeScreen : public OBDDataScreen {
                 + fuehrendeNull(sekunden);
     }
   protected:
-    void getDisplayText() {
+    void getDisplayText()
+    {
       ssd1306.setTextSize(1);
       ssd1306.cp437(true);
       ssd1306.setTextColor(SSD1306_WHITE);
@@ -209,7 +215,8 @@ class RunTimeScreen : public OBDDataScreen {
     RunTimeScreen(Adafruit_SSD1306 &ssd1306) : OBDDataScreen(ssd1306){}
 };
 
-class KmhRpmScreen : public OBDDataScreen {
+class KmhRpmScreen : public OBDDataScreen
+{
   protected:
     void getDisplayText() {
       ssd1306.setTextSize(1);
@@ -248,11 +255,12 @@ byte screenIndex = 0;
 const unsigned int numScreens = sizeof(screens) / sizeof(OBDDataScreen*);
 
 // Laut Doku wird bei ESP das Attribut IRAM_ATTR für Interrupts benötigt
-void IRAM_ATTR isr() {
+void IRAM_ATTR isr()
+{
   // Interrupt muss ebenfalls entrauscht werden, sonst wird er mehrfach hintereinander ausgelöst
   // https://lastminuteengineers.com/handling-esp32-gpio-interrupts-tutorial/?utm_content=cmp-true
   button_time = millis();
-  if (button_time - last_button_time > 250) // TODO evtl länger warten als 250ms
+  if (button_time - last_button_time > 500) // Wait 500ms between each button pressed
   {
     ++screenIndex;
     if (screenIndex == numScreens) screenIndex = 0;
@@ -306,11 +314,15 @@ void setup()
 
   drawbitmap();    // Draw a small bitmap image
 
+  display.clearDisplay();
+  display.display();
+  delay(500);
+
   // Beim Bluetooth-Aufbau bricht die Spannung teilweise ein und ein Brownout wird erkannt
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
 
   DEBUG_PORT.println(F("Starte Aufbau"));
-  printinfo(F("Starte Bluetooth-Aufbau..."));
+  printinfo(F("Starte Bluetooth..."));
 
   // Bluetooth als Master erstellen
   ELM_PORT.begin("ToyotaInfoScreen", true);
@@ -362,9 +374,10 @@ void loop()
         DEBUG_PORT.print("RPM: "); Serial.println(rpm);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
+      {
         myELM327.printError();
-      
-      aktuellePID = OBD_PID_State::OEL_TEMP;
+        aktuellePID = OBD_PID_State::OEL_TEMP;
+      }
       break;
     }
 
@@ -378,9 +391,10 @@ void loop()
         DEBUG_PORT.print("Öltemperatur: "); Serial.println(oel_temp);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
+      {
         myELM327.printError();
-      
-      aktuellePID = OBD_PID_State::TANK_FUELLSTAND;
+        aktuellePID = OBD_PID_State::TANK_FUELLSTAND;
+      }
       break;
     }
 
@@ -394,9 +408,10 @@ void loop()
         DEBUG_PORT.print("Tank Füllstand: "); Serial.println(tank_fuellstand);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
+      {
         myELM327.printError();
-      
-      aktuellePID = OBD_PID_State::LAUFZEIT;
+        aktuellePID = OBD_PID_State::LAUFZEIT;
+      }
       break;
     }
 
@@ -410,9 +425,10 @@ void loop()
         DEBUG_PORT.print("Motorlaufzeit: "); Serial.println(motor_laufzeit);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
+      {
         myELM327.printError();
-      
-      aktuellePID = OBD_PID_State::KMH;
+        aktuellePID = OBD_PID_State::KMH;
+      }
       break;
     }
 
@@ -427,9 +443,10 @@ void loop()
         DEBUG_PORT.print("KMH: "); Serial.println(kmh);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
+      {
         myELM327.printError();
-      
-      aktuellePID = OBD_PID_State::VERBRAUCH_STUNDE;
+        aktuellePID = OBD_PID_State::VERBRAUCH_STUNDE;
+      }
       break;
     }
 
@@ -444,9 +461,10 @@ void loop()
         DEBUG_PORT.print("l/h: "); Serial.println(verbrauch_liter_pro_stunde);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
+      {
         myELM327.printError();
-      
-      aktuellePID = OBD_PID_State::DREHZAHL;
+        aktuellePID = OBD_PID_State::DREHZAHL;
+      }
       break;
     }
   
@@ -474,7 +492,8 @@ void loop()
   screens[screenIndex]->displayScreen();
 }
 
-void errLeds(void) {
+void errLeds(void)
+{
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
   delay(100);
@@ -482,10 +501,12 @@ void errLeds(void) {
   delay(100);
 }
 
-void drawtriangle(void) {
+void drawtriangle(void)
+{
   display.clearDisplay();
 
-  for(int16_t i = 0; i < max(display.width(), display.height()) / 2; i += 5) {
+  for(int16_t i = 0; i < max(display.width(), display.height()) / 2; i += 5)
+  {
     display.drawTriangle(
       display.width() / 2, display.height() / 2 - i,
       display.width() / 2 - i, display.height() / 2 + i,
@@ -497,10 +518,12 @@ void drawtriangle(void) {
   delay(1000);
 }
 
-void filltriangle(void) {
+void filltriangle(void)
+{
   display.clearDisplay();
 
-  for(int16_t i = max(display.width(), display.height()) / 2; i > 0; i -= 5) {
+  for(int16_t i = max(display.width(), display.height()) / 2; i > 0; i -= 5)
+  {
     // The INVERSE color is used so triangles alternate white/black
     display.fillTriangle(
       display.width() / 2, display.height() / 2 - i,
@@ -513,7 +536,8 @@ void filltriangle(void) {
   delay(1000);
 }
 
-void drawbitmap(void) {
+void drawbitmap(void)
+{
   display.clearDisplay();
 
   // Invert and restore display, pausing in-between
