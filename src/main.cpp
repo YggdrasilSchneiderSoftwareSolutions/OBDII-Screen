@@ -17,7 +17,7 @@ ELM327 myELM327;
 
 #define ELM_PORT   SerialBT
 #define DEBUG_PORT Serial
-// Der ESP32-Core definiert kein LED_BUILTIN, die LED ist aber standardmäßig auf GPIO 2
+// The ESP32-Core doesn't define LED_BUILTIN but it's GPIO 2 by default
 // https://www.az-delivery.de/blogs/azdelivery-blog-fur-arduino-und-raspberry-pi/esp32-jetzt-mit-boardverwalter-installieren?page=2
 #ifndef LED_BUILTIN
 #define LED_BUILTIN 2
@@ -26,7 +26,7 @@ ELM327 myELM327;
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3C // See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+#define SCREEN_ADDRESS 0x3C // See datasheet for Address
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define LOGO_HEIGHT 64
@@ -98,20 +98,20 @@ unsigned long last_button_time = 0;
 
 uint32_t rpm = 0;
 uint32_t kmh = 0;
-float oel_temp = 0.0;
-float tank_fuellstand = 0;
-uint16_t motor_laufzeit = 0;
-float verbrauch_liter_pro_stunde = 0.0;
-float verbrauch_liter_pro_100km = 0.0;
+float oil_temp = 0.0;
+float fuel_level = 0;
+uint16_t engine_runtime = 0;
+float consumption_liters_per_hour = 0.0;
+float consumption_liters_per_100km = 0.0;
 
-/* Schalter, um den Zeitpunkt der Berechnung für l/100km zu bestimmen */
-bool kmh_ermittelt = false;
-bool liter_pro_stunde_ermittelt = false;
+// Switches to determine the time for l/100km calculation
+bool kmh_determined = false;
+bool liters_per_hour_determined = false;
 
-enum class OBD_PID_State { DREHZAHL, KMH, OEL_TEMP, LAUFZEIT, TANK_FUELLSTAND, VERBRAUCH_STUNDE };
-OBD_PID_State aktuellePID = OBD_PID_State::DREHZAHL;
+enum class OBD_PID_State { RPM, KMH, OIL_TEMPERATURE, RUNTIME, FUEL_LEVEL, CONSUMPTION_HOUR };
+OBD_PID_State currentPID = OBD_PID_State::RPM;
 
-// Klassendefinitionen für verschiedene Screens auf dem SSD1306
+// Class definitions for different Screens on the SSD1306
 class OBDDataScreen
 {
   protected:
@@ -140,8 +140,8 @@ class FuelConsumptionScreen : public OBDDataScreen
       ssd1306.println(F("              l/100km\n"));
       ssd1306.setTextSize(4); 
       //ssd1306.println(F(" 6.5"));
-      if (verbrauch_liter_pro_100km < 10) ssd1306.print(" ");
-      ssd1306.println(verbrauch_liter_pro_100km, 1);
+      if (consumption_liters_per_100km < 10) ssd1306.print(" ");
+      ssd1306.println(consumption_liters_per_100km, 1);
     }
   public:
     FuelConsumptionScreen(Adafruit_SSD1306 &ssd1306) : OBDDataScreen(ssd1306){}
@@ -160,8 +160,8 @@ class OilTemperatureScreen : public OBDDataScreen
       ssd1306.println(F("              CELCIUS\n"));
       ssd1306.setTextSize(4); 
       //ssd1306.println(F("34.5"));
-      if (oel_temp < 10) ssd1306.print(" ");
-      ssd1306.println(oel_temp, 1);
+      if (oil_temp < 10) ssd1306.print(" ");
+      ssd1306.println(oil_temp, 1);
     }
   public:
     OilTemperatureScreen(Adafruit_SSD1306 &ssd1306) : OBDDataScreen(ssd1306){}
@@ -170,28 +170,28 @@ class OilTemperatureScreen : public OBDDataScreen
 class RunTimeScreen : public OBDDataScreen
 {
   private:
-    String getLaufzeitFormatiert()
+    String getRuntimeFormatted()
     {
-      auto fuehrendeNull = [&](int zahl) -> String
+      auto leadingZero = [&](int number) -> String
       {
-        if (zahl == 0) return "00";
-        else if (zahl < 10) return "0" + String(zahl);
-        return String(zahl);
+        if (number == 0) return "00";
+        else if (number < 10) return "0" + String(number);
+        return String(number);
       };
 
-      int stunden = 0;
-      int minuten = 0;
-      int sekunden = 0;
+      int hours = 0;
+      int minutes = 0;
+      int seconds = 0;
 
-      stunden = motor_laufzeit / 3600;
-      minuten = (motor_laufzeit / 60) % 60;
-      sekunden = motor_laufzeit % 60;
+      hours = engine_runtime / 3600;
+      minutes = (engine_runtime / 60) % 60;
+      seconds = engine_runtime % 60;
 
-      return fuehrendeNull(stunden) 
+      return leadingZero(hours) 
                 + ":" 
-                + fuehrendeNull(minuten) 
+                + leadingZero(minutes) 
                 + ":" 
-                + fuehrendeNull(sekunden);
+                + leadingZero(seconds);
     }
   protected:
     void getDisplayText()
@@ -203,13 +203,13 @@ class RunTimeScreen : public OBDDataScreen
       ssd1306.println(F("             Laufzeit"));
       ssd1306.setTextSize(2);
       //ssd1306.println(F(" 00:12:34\n"));
-      ssd1306.println(" " + getLaufzeitFormatiert());
+      ssd1306.println(" " + getRuntimeFormatted());
       ssd1306.setTextSize(1);
       ssd1306.println(F("\n        Tankf\201llung \045"));
       ssd1306.setTextSize(2); 
       //ssd1306.println(F(" 76.8"));
       ssd1306.print(" ");
-      ssd1306.println(tank_fuellstand, 1);
+      ssd1306.println(fuel_level, 1);
     }
   public:
     RunTimeScreen(Adafruit_SSD1306 &ssd1306) : OBDDataScreen(ssd1306){}
@@ -231,11 +231,11 @@ class KmhRpmScreen : public OBDDataScreen
       ssd1306.setTextSize(1);
       ssd1306.println(F("             Drehzahl"));
       ssd1306.setTextSize(2);
-      // Pfeile werden zwischen 0 und 5000 Umdrehungen berechnet
-      // maximal können 10 Zeichen angezeigt werden, d.h. pro 500 ein Pfeil
-      int anzahlRpmPfeile = rpm / 500;
+      // Arrows are calculated between 0 and 5000 rpm
+      // a maximum of 10 characters can be displayed, i.e. one arrow per 500
+      int numberOfRpmArrows = rpm / 500;
       //ssd1306.println(F(">>>>>>>"));
-      for (int i = 0; i < anzahlRpmPfeile; ++i)
+      for (int i = 0; i < numberOfRpmArrows; ++i)
       {
         ssd1306.print(">");
       }
@@ -244,8 +244,8 @@ class KmhRpmScreen : public OBDDataScreen
     KmhRpmScreen(Adafruit_SSD1306 &ssd1306) : OBDDataScreen(ssd1306){}
 };
 
-// Da ein Array aus virtuellen abstrakten Klassen erstellt wird, muss mit Pointern gearbeitet werden, 
-// da keine Objekte von dieser Klasse erstellt werden dürfen
+// Since an array of virtual abstract classes is created, you have to work with pointers,
+// as no objects may be created from this class
 FuelConsumptionScreen* fuel_screen = new FuelConsumptionScreen(display);
 OilTemperatureScreen* oil_screen = new OilTemperatureScreen(display);
 RunTimeScreen* run_time_screen = new RunTimeScreen(display);
@@ -254,10 +254,10 @@ OBDDataScreen* screens[] = { fuel_screen, oil_screen, run_time_screen, kmh_rpm_s
 byte screenIndex = 0;
 const unsigned int numScreens = sizeof(screens) / sizeof(OBDDataScreen*);
 
-// Laut Doku wird bei ESP das Attribut IRAM_ATTR für Interrupts benötigt
+// According the documentation you need to define the attribute IRAM_ATTR for interrupts
 void IRAM_ATTR isr()
 {
-  // Interrupt muss ebenfalls entrauscht werden, sonst wird er mehrfach hintereinander ausgelöst
+  // Interrupt must also be denoised, otherwise it will be triggered several times in a row
   // https://lastminuteengineers.com/handling-esp32-gpio-interrupts-tutorial/?utm_content=cmp-true
   button_time = millis();
   if (button_time - last_button_time > 500) // Wait 500ms between each button pressed
@@ -270,15 +270,15 @@ void IRAM_ATTR isr()
 
 void setup()
 {
-  // Baudrate und PIN gibt der ELM 327 vor
+  // Baudrate and PIN are defined by ELM 327
   DEBUG_PORT.begin(38400);
 
-  // Durch PULLUP wird der interne Resistor des Chips verwendet, um Spannung auf dem Button zu entrauschen.
-  // Dadurch braucht der Button auch keine eigene Spannung, sondern nur GND und Data
-  // State ist bei Drücken LOW sonst HIGH
+  // PULLUP uses the chip's internal resistor to denoise voltage on the button.
+  // As a result, the button does not need its own voltage, only GND and data
+  // State is LOW when pressed otherwise HIGH
   // https://roboticsbackend.com/arduino-input_pullup-pinmode/
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  // Interrupt Mode FALLING wird immer bei Wechsel von HIGH zu LOW ausgelöst
+  // Interrupt Mode FALLING is triggered when HIGH changes to LOW
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), isr, FALLING);
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
@@ -318,17 +318,17 @@ void setup()
   display.display();
   delay(500);
 
-  // Beim Bluetooth-Aufbau bricht die Spannung teilweise ein und ein Brownout wird erkannt
+  // During Bluetooth setup, the voltage partially collapses and a brownout is detected
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
 
   DEBUG_PORT.println(F("Starte Aufbau"));
   printinfo(F("Starte Bluetooth..."));
 
-  // Bluetooth als Master erstellen
+  // Start Bluetooth as master
   ELM_PORT.begin("ToyotaInfoScreen", true);
   ELM_PORT.setPin("1234");
   
-  // Bluetooth-Verbindung über MAC ist schneller, als über Bluetoothname
+  // Bluetooth-connection via MAC is faster than via Bluetoothname
   uint8_t address[6] = {0x00, 0x10, 0xCC, 0x4F, 0x36, 0x03};
   DEBUG_PORT.println("Verbinde mit MAC 00:10:CC:4F:36:03");
   printinfo(F("Verbinde mit\nMAC 00:10:CC:4F:36:03"));
@@ -354,7 +354,7 @@ void setup()
   DEBUG_PORT.println("Verbindung mit ELM327 hergestellt");
   printinfo(F("Mit ELM327 verbunden"));
 
-  // Beim Bluetooth-Aufbau bricht die Spannung teilweise ein und ein Brownout wird erkannt
+  // During Bluetooth setup, the voltage partially collapses and a brownout is detected
   delay(1000);
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 1); // enable brownout detector
 }
@@ -362,9 +362,9 @@ void setup()
 
 void loop()
 {
-  switch (aktuellePID)
+  switch (currentPID)
   {
-    case OBD_PID_State::DREHZAHL:
+    case OBD_PID_State::RPM:
     {
       float tempRPM = myELM327.rpm();
 
@@ -376,58 +376,58 @@ void loop()
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        aktuellePID = OBD_PID_State::OEL_TEMP;
+        currentPID = OBD_PID_State::OIL_TEMPERATURE;
       }
       break;
     }
 
-    case OBD_PID_State::OEL_TEMP:
+    case OBD_PID_State::OIL_TEMPERATURE:
     {
-      float tempOelTemp = myELM327.oilTemp();
+      float tempOilTemp = myELM327.oilTemp();
 
       if (myELM327.nb_rx_state == ELM_SUCCESS)
       {
-        oel_temp = tempOelTemp;
-        DEBUG_PORT.print("Öltemperatur: "); Serial.println(oel_temp);
+        oil_temp = tempOilTemp;
+        DEBUG_PORT.print("Öltemperatur: "); Serial.println(oil_temp);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        aktuellePID = OBD_PID_State::TANK_FUELLSTAND;
+        currentPID = OBD_PID_State::FUEL_LEVEL;
       }
       break;
     }
 
-    case OBD_PID_State::TANK_FUELLSTAND:
+    case OBD_PID_State::FUEL_LEVEL:
     {
-      float tempTankFuellstand = myELM327.fuelLevel();
+      float tempFuelLevel = myELM327.fuelLevel();
 
       if (myELM327.nb_rx_state == ELM_SUCCESS)
       {
-        tank_fuellstand = tempTankFuellstand;
-        DEBUG_PORT.print("Tank Füllstand: "); Serial.println(tank_fuellstand);
+        fuel_level = tempFuelLevel;
+        DEBUG_PORT.print("Tank Füllstand: "); Serial.println(fuel_level);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        aktuellePID = OBD_PID_State::LAUFZEIT;
+        currentPID = OBD_PID_State::RUNTIME;
       }
       break;
     }
 
-    case OBD_PID_State::LAUFZEIT:
+    case OBD_PID_State::RUNTIME:
     {
-      uint16_t tempLaufzeit = myELM327.runTime();
+      uint16_t tempRuntime = myELM327.runTime();
 
       if (myELM327.nb_rx_state == ELM_SUCCESS)
       {
-        motor_laufzeit = tempLaufzeit;
-        DEBUG_PORT.print("Motorlaufzeit: "); Serial.println(motor_laufzeit);
+        engine_runtime = tempRuntime;
+        DEBUG_PORT.print("Motorlaufzeit: "); Serial.println(engine_runtime);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        aktuellePID = OBD_PID_State::KMH;
+        currentPID = OBD_PID_State::KMH;
       }
       break;
     }
@@ -439,31 +439,31 @@ void loop()
       if (myELM327.nb_rx_state == ELM_SUCCESS)
       {
         kmh = (uint32_t) tempKMH;
-        kmh_ermittelt = true;
+        kmh_determined = true;
         DEBUG_PORT.print("KMH: "); Serial.println(kmh);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        aktuellePID = OBD_PID_State::VERBRAUCH_STUNDE;
+        currentPID = OBD_PID_State::CONSUMPTION_HOUR;
       }
       break;
     }
 
-    case OBD_PID_State::VERBRAUCH_STUNDE:
+    case OBD_PID_State::CONSUMPTION_HOUR:
     {
-      float tempLiterProStunde = myELM327.fuelRate();
+      float tempLitersPerHour = myELM327.fuelRate();
 
       if (myELM327.nb_rx_state == ELM_SUCCESS)
       {
-        verbrauch_liter_pro_stunde = tempLiterProStunde;
-        liter_pro_stunde_ermittelt = true;
-        DEBUG_PORT.print("l/h: "); Serial.println(verbrauch_liter_pro_stunde);
+        consumption_liters_per_hour = tempLitersPerHour;
+        liters_per_hour_determined = true;
+        DEBUG_PORT.print("l/h: "); Serial.println(consumption_liters_per_hour);
       }
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        aktuellePID = OBD_PID_State::DREHZAHL;
+        currentPID = OBD_PID_State::RPM;
       }
       break;
     }
@@ -472,23 +472,23 @@ void loop()
       break;
   }
 
-  if (kmh_ermittelt && liter_pro_stunde_ermittelt)
+  if (kmh_determined && liters_per_hour_determined)
   {
-    // Wir haben die Parameter für die Berechnung l/100km ermittelt und können rechnen
-    // Mögliche Ansätze:
+    // We've all data we need for the l/100km calculation and can do the math
+    // Possible solutions:
     // https://stackoverflow.com/questions/17170646/what-is-the-best-way-to-get-fuel-consumption-mpg-using-obd2-parameters
     // https://stackoverflow.com/questions/72659339/fuel-consumtion-data-via-obd2-is-wrong-can-you-help-me-out
   
-    // Da Toyota den PID 5E (Fuel Rate l/h) unterstützt, wird hier damit gerechnet.
-    // Um generisch zu funktionieren, sollte die Formel des ersten Links ggf. zusätzlich eingebaut
-    // und die beiden Ergebnisse verglichen werden.
-    verbrauch_liter_pro_100km = verbrauch_liter_pro_stunde / kmh;
+    // Since Toyota supports the PID 5E (Fuel Rate l/h), this is expected here.
+    // In order to work generically, the formula of the first link should also be included if necessary
+    // and the two results are compared.
+    consumption_liters_per_100km = consumption_liters_per_hour / kmh;
   
-    kmh_ermittelt = false;
-    liter_pro_stunde_ermittelt = false;
+    kmh_determined = false;
+    liters_per_hour_determined = false;
   }
 
-  // Ausgabe auf Display
+  // Show data on display
   screens[screenIndex]->displayScreen();
 }
 
@@ -541,14 +541,14 @@ void drawbitmap(void)
   display.clearDisplay();
 
   // Invert and restore display, pausing in-between
-  display.invertDisplay(true);
+  //display.invertDisplay(true);
   display.drawBitmap(
     (display.width()  - LOGO_WIDTH ) / 2,
     (display.height() - LOGO_HEIGHT) / 2,
     epd_bitmap_toyota_logo, LOGO_WIDTH, LOGO_HEIGHT, 1);
   display.display();
   delay(3000);
-  display.invertDisplay(false);
+  //display.invertDisplay(false);
 }
 
 void printinfo(const String& text, const bool clear_display, const bool new_line)
