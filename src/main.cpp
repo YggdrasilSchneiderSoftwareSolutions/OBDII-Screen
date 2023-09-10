@@ -376,8 +376,8 @@ void loop()
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        currentPID = OBD_PID_State::OIL_TEMPERATURE;
       }
+      currentPID = OBD_PID_State::OIL_TEMPERATURE;
       break;
     }
 
@@ -393,8 +393,8 @@ void loop()
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        currentPID = OBD_PID_State::FUEL_LEVEL;
       }
+      currentPID = OBD_PID_State::FUEL_LEVEL;
       break;
     }
 
@@ -410,8 +410,8 @@ void loop()
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        currentPID = OBD_PID_State::RUNTIME;
       }
+      currentPID = OBD_PID_State::RUNTIME;
       break;
     }
 
@@ -427,8 +427,8 @@ void loop()
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        currentPID = OBD_PID_State::KMH;
       }
+      currentPID = OBD_PID_State::KMH;
       break;
     }
 
@@ -445,8 +445,8 @@ void loop()
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        currentPID = OBD_PID_State::CONSUMPTION_HOUR;
       }
+      currentPID = OBD_PID_State::CONSUMPTION_HOUR;
       break;
     }
 
@@ -463,8 +463,8 @@ void loop()
       else if (myELM327.nb_rx_state != ELM_GETTING_MSG)
       {
         myELM327.printError();
-        currentPID = OBD_PID_State::RPM;
       }
+      currentPID = OBD_PID_State::RPM;
       break;
     }
   
